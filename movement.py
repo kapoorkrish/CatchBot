@@ -17,80 +17,84 @@ motor2 = RpiMotorLib.A4988Nema(23, 24, (22,22,22), "DRV8825")
 X_pos = 0
 Y_pos = 0
 
-# Options
-speed = (.0005) * 1
 X_max = 1450
 Y_max = 1600
 min = 0
+
+# Options
+speed = (.0005) * 1
 
 # Movement
 t1 = threading.Thread()
 t2 = threading.Thread()
 
-def check_pos(is_X: bool, dir: bool, pos: int):
+def move_motor(motor: RpiMotorLib.A4988Nema, dir: bool, move: int):
+    motor.motor_go(dir, "Full" , move, speed, False, .05)
+
+def X_axis(dir: bool, move: int):
+    t1 = threading.Thread(target=move_motor, args=(motor1, dir, move))
+    t2 = threading.Thread(target=move_motor, args=(motor2, dir, move))
+    
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+def Y_axis(dir: bool, move: int):
+    t1 = threading.Thread(target=move_motor, args=(motor1, dir, move))
+    t2 = threading.Thread(target=move_motor, args=(motor2, not dir, move))
+    
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+def to_pos(X: int, Y: int):
     global X_pos
     global Y_pos
     global X_max
     global Y_max
-    current_pos = 0
-    max = 0
 
-    # Read axis position and bounds
-    if is_X:
-        current_pos = X_pos
-        max = X_max
+    # Calculate how much to move to reach position
+    X_move = X - X_pos
+    Y_move = Y - Y_pos
+
+    # Set X axis position, ensure in bounds
+    if (X_pos + X_move) > X_max:
+        X_move = X_max - X_pos
+        X_pos = X_max
+    elif (X_pos + X_move) < min:
+        X_move = min - X_pos
+        X_pos = min
     else:
-        current_pos = Y_pos
-        max = Y_max
-
-    # Set axis position, ensure in bounds
-    if (current_pos + pos) > max and dir:
-        pos = max - current_pos
-        current_pos = max
-    elif (current_pos - pos) < min and not dir:
-        pos = current_pos - min
-        current_pos = min
+        X_pos += X_move
+    
+    # Set Y axis position, ensure in bounds
+    if (Y_pos + Y_move) > Y_max:
+        Y_move = Y_max - Y_pos
+        Y_pos = Y_max
+    elif (Y_pos + Y_move) < min:
+        Y_move = min - Y_pos
+        Y_pos = min
     else:
-        if not dir:
-            current_pos -= pos
-        else:
-            current_pos += pos
-
-    # Update axis position
-    if is_X:
-        X_pos = current_pos
-    else:
-        Y_pos = current_pos
+        Y_pos += Y_move
     
-    # Return safe position in bounds
-    return pos
+    # Set direction
+    X_dir = True
+    Y_dir = True
 
-def move_motor(motor: RpiMotorLib.A4988Nema, dir: bool, pos: int):
-    motor.motor_go(dir, "Full" , pos, speed, False, .05)
-
-def X(dir: bool, pos: int):
-    pos = check_pos(True, dir, pos)
-
-    t1 = threading.Thread(target=move_motor, args=(motor1, dir, pos))
-    t2 = threading.Thread(target=move_motor, args=(motor2, dir, pos))
+    if X_move < 0:
+        X_dir = False
+    if Y_move < 0:
+        Y_dir = False
     
-    t1.start()
-    t2.start()
-    t1.join()
-    t2.join()
+    X_axis(X_dir, abs(X_move))
+    Y_axis(Y_dir, abs(Y_move))
 
-def Y(dir: bool, pos: int):
-    pos = check_pos(False, dir, pos)
+    print(f"({X_pos}, {Y_pos})")
 
-    t1 = threading.Thread(target=move_motor, args=(motor1, dir, pos))
-    t2 = threading.Thread(target=move_motor, args=(motor2, not dir, pos))
-    
-    t1.start()
-    t2.start()
-    t1.join()
-    t2.join()
 
-Y(True, int(Y_max / 2))
-X(True, int(X_max / 2))
+to_pos(int(X_max / 2), int(Y_max / 2))
+to_pos(min, min)
 
 GPIO.cleanup()
