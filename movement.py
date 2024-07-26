@@ -1,6 +1,7 @@
 import RPi.GPIO as GPIO
 from RpiMotorLib import RpiMotorLib
 import threading
+from time import sleep
 
 # Motor control
 # False=Clockwise, True=Counterclockwise
@@ -31,24 +32,6 @@ t2 = threading.Thread()
 def move_motor(motor: RpiMotorLib.A4988Nema, dir: bool, move: int):
     motor.motor_go(dir, "Full" , move, speed, False, .05)
 
-def X_axis(dir: bool, move: int):
-    t1 = threading.Thread(target=move_motor, args=(motor1, dir, move))
-    t2 = threading.Thread(target=move_motor, args=(motor2, dir, move))
-    
-    t1.start()
-    t2.start()
-    t1.join()
-    t2.join()
-
-def Y_axis(dir: bool, move: int):
-    t1 = threading.Thread(target=move_motor, args=(motor1, dir, move))
-    t2 = threading.Thread(target=move_motor, args=(motor2, not dir, move))
-    
-    t1.start()
-    t2.start()
-    t1.join()
-    t2.join()
-
 def to_pos(X: int, Y: int):
     global X_pos
     global Y_pos
@@ -78,22 +61,34 @@ def to_pos(X: int, Y: int):
         Y_pos = min
     else:
         Y_pos += Y_move
-    
-    # Set direction
-    X_dir = True
-    Y_dir = True
 
-    if X_move < 0:
-        X_dir = False
-    if Y_move < 0:
-        Y_dir = False
+    # Calculate motor position
+    motor1_pos = 0
+    motor2_pos = 0
     
-    X_axis(X_dir, abs(X_move))
-    Y_axis(Y_dir, abs(Y_move))
+    motor1_pos = X_move + Y_move
+    motor2_pos = X_move - Y_move
+
+    # Calculate motor direction
+    motor1_dir = True
+    motor2_dir = True
+
+    if (motor1_pos < 0):
+        motor1_dir = False
+    if (motor2_pos < 0):
+        motor2_dir = False
+
+    t1 = threading.Thread(target=move_motor, args=(motor1, motor1_dir, abs(motor1_pos)))
+    t2 = threading.Thread(target=move_motor, args=(motor2, motor2_dir, abs(motor2_pos)))
+    
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
 
     print(f"({X_pos}, {Y_pos})")
 
-
+sleep(1)
 to_pos(int(X_max / 2), int(Y_max / 2))
 to_pos(min, min)
 
