@@ -1,3 +1,6 @@
 RPi.GPIO
 RpiMotorLib
 pynput
+opencv-python
+imutils
+numpy

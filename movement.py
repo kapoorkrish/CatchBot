@@ -1,7 +1,5 @@
-import RPi.GPIO as GPIO
 from RpiMotorLib import RpiMotorLib
 import threading
-from time import sleep
 
 # Motor control
 # False=Clockwise, True=Counterclockwise
@@ -15,12 +13,14 @@ from time import sleep
 motor1 = RpiMotorLib.A4988Nema(20, 21, (22,22,22), "DRV8825")
 motor2 = RpiMotorLib.A4988Nema(23, 24, (22,22,22), "DRV8825")
 
-X_pos = 0
-Y_pos = 0
-
 X_max = 1450
 Y_max = 1600
 min = 0
+
+# X_pos = 0
+# Y_pos = 0
+X_pos = int(X_max / 2)
+Y_pos = int(Y_max / 2)
 
 # Options
 speed = (.0005) * 1
@@ -29,10 +29,10 @@ speed = (.0005) * 1
 t1 = threading.Thread()
 t2 = threading.Thread()
 
-def move_motor(motor: RpiMotorLib.A4988Nema, dir: bool, move: int):
-    motor.motor_go(dir, "Full" , move, speed, False, .05)
+def move_motor(motor: RpiMotorLib.A4988Nema, dir: bool, move: int, tps: float):
+    motor.motor_go(dir, "Full" , move, tps, False, .05)
 
-def to_pos(X: int, Y: int):
+def to_pos(X: int, Y: int, tps=speed):
     global X_pos
     global Y_pos
     global X_max
@@ -78,18 +78,12 @@ def to_pos(X: int, Y: int):
     if (motor2_pos < 0):
         motor2_dir = False
 
-    t1 = threading.Thread(target=move_motor, args=(motor1, motor1_dir, abs(motor1_pos)))
-    t2 = threading.Thread(target=move_motor, args=(motor2, motor2_dir, abs(motor2_pos)))
+    t1 = threading.Thread(target=move_motor, args=(motor1, motor1_dir, abs(motor1_pos), tps))
+    t2 = threading.Thread(target=move_motor, args=(motor2, motor2_dir, abs(motor2_pos), tps))
     
     t1.start()
     t2.start()
     t1.join()
     t2.join()
 
-    print(f"({X_pos}, {Y_pos})")
-
-sleep(1)
-to_pos(int(X_max / 2), int(Y_max / 2))
-to_pos(min, min)
-
-GPIO.cleanup()
+    print(f"({X}, {Y})")

@@ -1,16 +1,31 @@
-from collections import deque
-
+import RPi.GPIO as GPIO
 import imutils
-import numpy as np
 import cv2
+import numpy as np
 
+from collections import deque
 from time import time
 
+from movement import to_pos, min, X_max, Y_max
+
+# Start in center
+to_pos(int(X_max / 2), int(Y_max / 2), (.0005) * 2)
+
+# Initialize variables
 timePrev = 0
+found_x_target = False
+found_y_target = False
+x_target = 0
+y_target = 0
+
+# Stepper motors
+X_max = 1450
+Y_max = 1600
+min = 0
 
 # Target zone boundaries
-rect_tl = (288, 30)
-rect_br = (360, 94)
+rect_tl = (276, 24)
+rect_br = (343, 88)
 
 # HSV boundaries
 orangeLower = (7, 0, 219)
@@ -19,27 +34,11 @@ orangeUpper = (14, 255, 255)
 # Define lists for data
 buffer = 50
 coords = deque(maxlen=buffer)
-radii = deque(maxlen=10)
+radii = deque(maxlen=5)
 target_coords = deque(maxlen=rect_br[0])
 
-# Kalman Filter
-kf = cv2.KalmanFilter(4, 2)
-kf.measurementMatrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], np.float32)
-kf.transitionMatrix = np.array([[1, 0, 1, 0], [0, 1, 0, 1], 
-								[0, 0, 1, 0], [0, 0, 0, 1]], np.float32)
-
-stream = cv2.VideoCapture(1)
-def track():
-	global timePrev
-	global rect_tl
-	global rect_br
-	global orangeLower
-	global orangeUpper
-	global coords
-	global radii
-	global target_coords
-	global kf
-
+stream = cv2.VideoCapture(0)
+try:
 	while True:
 		active, frame = stream.read()
 		if active:
@@ -82,18 +81,30 @@ def track():
 				radii_sorted = sorted(radii)
 				radius = radii_sorted[int(len(radii) / 2)]
 			
-				# Prediction
-				for coord in coords:
-					kf.correct(np.array([[np.float32(coord[0])], [np.float32(coord[1])]]))
+			# Determine target
+			if not found_y_target:
+				if len(coords) >= 5 and len(radii) >= 5:
+					# Predict y coordinate with radius
+					y_data = np.array([coords[0][1], coords[1][1], coords[2][1], coords[3][1], coords[4][1]])
+					radii_data = np.array([radii[0], radii[1], radii[2], radii[3], radii[4]])
 
-				for i in range(5):
-					kf.correct(np.array([[np.float32(predicted[0])], [np.float32(predicted[1])]]))
-					predicted = kf.predict()
+					coefficients = np.polyfit(y_data, radii_data, 2)
 
-					if (predicted[0] >= 1 and predicted[0] <= 598) and (predicted[1] >= 1 and predicted[1] <= 335):
-						coords.appendleft(predicted)
-					else:
-						break
+					y_predict = np.linspace(max(y_data), 0, 100)
+					radii_predict = np.polyval(coefficients, y_predict)
+
+					for i in range(len(radii_predict)):
+						if radii_predict[i] <= 0:
+							y_target = round(y_predict[i])
+
+							# Limit to zone bounds
+							if y_target > rect_br[1]:
+								y_target = rect_br[1]
+							elif y_target < rect_tl[1]:
+								y_target = rect_tl[1]
+							
+							found_y_target = True
+							break
 			
 			# Best fit line through coordinates
 			if len(coords) > 1:
@@ -110,5 +121,30 @@ def track():
 				# If predicted line coordinates are in zone, add to possibilities
 				for x_line in range(0, (rect_br[0]+1)):
 					y_line += slope
-					if x_line >= rect_tl[0] and y_line >= rect_tl[1] and y_line <= rect_br[1]:
-						target_coords.appendleft((x_line, round(y_line)))
+
+					if x_line >= rect_tl[0]:
+						if not found_x_target and found_y_target:
+							if slope > 0:
+								if y_line >= y_target:
+									x_target = x_line
+
+									# Map prediction to stepper motor coordinates
+									x_mapped = round(np.interp(x_target - rect_tl[0], [0, rect_br[0] - rect_tl[0]], [min, X_max]).item())
+									y_mapped = round(np.interp(rect_br[1] - round(y_target), [0, rect_br[1] - rect_tl[1]], [min, Y_max]).item())
+									to_pos(X_max - x_mapped, Y_max - y_mapped)
+
+									found_x_target = True
+							elif slope < 0:
+								if y_line <= y_target:
+									x_target = x_line
+
+									# Map prediction to stepper motor coordinates
+									x_mapped = round(np.interp(x_target - rect_tl[0], [0, rect_br[0] - rect_tl[0]], [min, X_max]).item())
+									y_mapped = round(np.interp(rect_br[1] - round(y_target), [0, rect_br[1] - rect_tl[1]], [min, Y_max]).item())
+									to_pos(X_max - x_mapped, Y_max - y_mapped)
+
+									found_x_target = True
+except KeyboardInterrupt:
+	print(f"Target: {x_target, y_target}")
+	stream.release()
+	GPIO.cleanup()
