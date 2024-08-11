@@ -5,4 +5,6 @@ CatchBot is a machine that I made for fun that uses Raspberry Pi and the OpenCV 
 </p>
 
 # Design Process
+Check out this video which details how I created it! I submitted this as my MIT Maker Portfolio.
+
 [![CatchBot Video](https://github.com/user-attachments/assets/03521901-b330-46d8-8e9c-1e7190f81a66)](https://youtu.be/ukb7cln0-VM)
